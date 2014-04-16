@@ -66,7 +66,7 @@ void TrueOrExit(BOOL call)
 
 	if(!(call))
 	{
-		ErrorHandler(TEXT("Fucntion"));
+		ErrorHandler(TEXT("Runasp"));
 		ExitProcess(1);
 	}
 }
@@ -81,16 +81,25 @@ int _tmain(int argc, _TCHAR *argv[])
 {
 	if(argc != 4)
 	{
-		_tprintf(TEXT("Usage \"%s\" <user_login> <password> <program_path_not_command_line>"), argv[0]);
+		_tprintf(TEXT("Usage \"%s\" <user_login> <password> <command_line>"), argv[0]);
 		ExitProcess(1);
 	}
 
 	{
 		PROCESS_INFORMATION ProcessInformation;
 		STARTUPINFO StartupInfo;
+		DWORD dwCwdBufLen = 500 * sizeof(TCHAR);
+		LPTSTR lpCwdBuf = (LPTSTR)LocalAlloc(LMEM_ZEROINIT, dwCwdBufLen);
+
+		GetCurrentDirectory(dwCwdBufLen, lpCwdBuf);
 
 		ZeroMemory(&StartupInfo, sizeof(StartupInfo));
 		StartupInfo.cb = sizeof(StartupInfo);
+		StartupInfo.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+		StartupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+		StartupInfo.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+		StartupInfo.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+		StartupInfo.wShowWindow = SW_HIDE;
 		ZeroMemory(&ProcessInformation, sizeof(ProcessInformation));
 
 		TrueOrExit(CreateProcessWithLogonW(
@@ -100,14 +109,24 @@ int _tmain(int argc, _TCHAR *argv[])
 			0,
 			NULL,
 			argv[3],
-			0,
+			CREATE_NO_WINDOW,
 			NULL,
-			NULL,
+			lpCwdBuf,
 			&StartupInfo,
 			&ProcessInformation));
 
 		WaitForSingleObject(
 			ProcessInformation.hProcess,
 			INFINITE);
+
+		_ftprintf(
+			stderr,
+			TEXT("Runasp arguments are:\n%s\n%s\n%s\n%s\n%s\n"),
+			argv[0],
+			argv[1],
+			argv[2],
+			argv[3],
+			lpCwdBuf);
+		LocalFree(lpCwdBuf);
 	}
 }
