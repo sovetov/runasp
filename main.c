@@ -45,88 +45,134 @@ void ErrorHandler(LPCTSTR lpszFunction)
 	DWORD dw = GetLastError();
 
 	MakeErrorMessage(
-		TEXT("%s failed with error %d: %s"),
+		TEXT("%s failed with error %d: %s\n"),
 		lpszFunction,
 		dw,
 		(LPTSTR *) &lpDisplayBuf);
 
+	_ftprintf(stderr, lpDisplayBuf);
+
 	MessageBox(
 		NULL,
 		(LPCTSTR) lpDisplayBuf,
-		TEXT("Error"),
+		TEXT("Runasp error"),
 		MB_OK);
 
 	// Free error-handling buffer allocations.
 	LocalFree(lpDisplayBuf);
 }
 
-void TrueOrExit(BOOL call)
+void TrueOrExit(LPCTSTR message, BOOL call)
 {
-	_TCHAR *message = TEXT("Error: %d");
-
 	if(!(call))
 	{
-		ErrorHandler(TEXT("Runasp"));
-		ExitProcess(1);
+		ErrorHandler(message);
+		ExitProcess(0xFF000004);
 	}
 }
 
-HANDLE HandleOrExit(HANDLE call)
+HANDLE HandleOrExit(LPCTSTR message, HANDLE call)
 {
-	TrueOrExit(call != INVALID_HANDLE_VALUE);
+	TrueOrExit(message, call != INVALID_HANDLE_VALUE);
 	return call;
 }
 
 int _tmain(int argc, _TCHAR *argv[])
 {
-	if(argc != 4)
+	DWORD dwExitCode;
+
+	if(argc != 5)
 	{
-		_tprintf(TEXT("Usage \"%s\" <user_login> <password> <command_line>"), argv[0]);
-		ExitProcess(1);
+		_ftprintf(stderr, TEXT("Runasp. Usage \"%s\" <user_login> <password> <command_line> <redirect_streams>"), argv[0]);
+		ExitProcess(0xFF000002);
 	}
 
 	{
-		PROCESS_INFORMATION ProcessInformation;
-		STARTUPINFO StartupInfo;
 		DWORD dwCwdBufLen = 500 * sizeof(TCHAR);
 		LPTSTR lpCwdBuf = (LPTSTR)LocalAlloc(LMEM_ZEROINIT, dwCwdBufLen);
 
-		GetCurrentDirectory(dwCwdBufLen, lpCwdBuf);
+		{
+			GetCurrentDirectory(dwCwdBufLen, lpCwdBuf);
 
-		ZeroMemory(&StartupInfo, sizeof(StartupInfo));
-		StartupInfo.cb = sizeof(StartupInfo);
-		StartupInfo.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-		StartupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-		StartupInfo.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
-		StartupInfo.hStdError = GetStdHandle(STD_ERROR_HANDLE);
-		StartupInfo.wShowWindow = SW_HIDE;
-		ZeroMemory(&ProcessInformation, sizeof(ProcessInformation));
+			_ftprintf(
+				stderr,
+				TEXT("Runasp arguments are:\n%s\n%s\n%s\n%s\n%s\n\nRunasp working dir is:\n%s\n\n"),
+				argv[0],
+				argv[1],
+				argv[2],
+				argv[3],
+				argv[4],
+				lpCwdBuf);
+			fflush(stderr);
+		}
 
-		TrueOrExit(CreateProcessWithLogonW(
-			argv[1],
-			L".",
-			argv[2],
-			0,
-			NULL,
-			argv[3],
-			CREATE_NO_WINDOW,
-			NULL,
-			lpCwdBuf,
-			&StartupInfo,
-			&ProcessInformation));
+		{
+			JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInfo;
 
-		WaitForSingleObject(
-			ProcessInformation.hProcess,
-			INFINITE);
+			ZeroMemory(
+				&BasicLimitInfo,
+				sizeof(BasicLimitInfo));
+			QueryInformationJobObject(
+				NULL,
+				JobObjectBasicLimitInformation,
+				&BasicLimitInfo,
+				sizeof(BasicLimitInfo), NULL);
 
-		_ftprintf(
-			stderr,
-			TEXT("Runasp arguments are:\n%s\n%s\n%s\n%s\n%s\n"),
-			argv[0],
-			argv[1],
-			argv[2],
-			argv[3],
-			lpCwdBuf);
+			_ftprintf(stderr, TEXT("Runasp. Runasp basic limit flags are:\n0x%08X\n\n"), BasicLimitInfo.LimitFlags);
+			fflush(stderr);
+		}
+
+		{
+			PROCESS_INFORMATION ProcessInformation;
+			STARTUPINFO StartupInfo;
+
+			ZeroMemory(&StartupInfo, sizeof(StartupInfo));
+			StartupInfo.cb = sizeof(StartupInfo);
+			StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
+			if(_ttoi(argv[4]))
+			{
+				StartupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+				StartupInfo.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+				StartupInfo.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+			}
+			else
+			{
+				StartupInfo.hStdInput = INVALID_HANDLE_VALUE;
+				StartupInfo.hStdOutput = INVALID_HANDLE_VALUE;
+				StartupInfo.hStdError = INVALID_HANDLE_VALUE;
+			}
+			StartupInfo.dwFlags |= STARTF_USESHOWWINDOW;
+			StartupInfo.wShowWindow = SW_HIDE;
+			ZeroMemory(&ProcessInformation, sizeof(ProcessInformation));
+
+			_ftprintf(stderr, TEXT("Runasp. Calling CreateProcessWithLogonW...\n"));
+			fflush(stderr);
+			TrueOrExit(TEXT("CreateProcessWithLogonW"), CreateProcessWithLogonW(
+				argv[1],
+				L".",
+				argv[2],
+				0,
+				NULL,
+				argv[3],
+				CREATE_NO_WINDOW,
+				NULL,
+				lpCwdBuf,
+				&StartupInfo,
+				&ProcessInformation));
+			_ftprintf(stderr, TEXT("Runasp. CreateProcessWithLogonW has been called. Waiting for process...\n"));
+			fflush(stderr);
+			_ftprintf(stderr, TEXT("Runasp. Child process has exited. WaitForSingleObject returned 0x%08X\n"), WaitForSingleObject(
+				ProcessInformation.hProcess,
+				INFINITE));
+			fflush(stderr);
+
+			TrueOrExit(TEXT("GetExitCodeProcess"), GetExitCodeProcess(ProcessInformation.hProcess, &dwExitCode));
+			_ftprintf(stderr, TEXT("Runasp. Child process exit code is 0x%08X\n"), dwExitCode);
+			fflush(stderr);
+		}
+
 		LocalFree(lpCwdBuf);
 	}
+
+	return dwExitCode;
 }
