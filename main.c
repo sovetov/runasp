@@ -81,6 +81,8 @@ int _tmain(int argc, _TCHAR *argv[])
 {
 	DWORD dwExitCode;
 
+	SetErrorMode(SetErrorMode(0) | SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
+
 	if(argc != 5)
 	{
 		_ftprintf(stderr, TEXT("Runasp. Usage \"%s\" <user_login> <password> <command_line> <redirect_streams>"), argv[0]);
@@ -131,15 +133,17 @@ int _tmain(int argc, _TCHAR *argv[])
 			StartupInfo.dwFlags |= STARTF_USESTDHANDLES;
 			if(_ttoi(argv[4]))
 			{
+				_ftprintf(stderr, TEXT("Runasp. Creating process. Streams are redirected\n"));
 				StartupInfo.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
 				StartupInfo.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
 				StartupInfo.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 			}
 			else
 			{
-				StartupInfo.hStdInput = INVALID_HANDLE_VALUE;
-				StartupInfo.hStdOutput = INVALID_HANDLE_VALUE;
-				StartupInfo.hStdError = INVALID_HANDLE_VALUE;
+				_ftprintf(stderr, TEXT("Runasp. Creating process. Streams are suppressed\n"));
+				StartupInfo.hStdInput = NULL;
+				StartupInfo.hStdOutput = NULL;
+				StartupInfo.hStdError = NULL;
 			}
 			StartupInfo.dwFlags |= STARTF_USESHOWWINDOW;
 			StartupInfo.wShowWindow = SW_HIDE;
